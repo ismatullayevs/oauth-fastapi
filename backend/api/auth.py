@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import Annotated
 from sqlalchemy.orm import Session
@@ -17,12 +17,12 @@ router = APIRouter(prefix='/auth', tags=['auth'])
 settings = get_settings()
 ALGORITHM = 'HS256'
 ACCESS_TOKEN_EXPIRE_MINUTES = 15
+REFRESH_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 
 
-def create_access_token(data: dict) -> str:
+def create_jwt_token(data: dict, expires: timedelta) -> str:
     to_update = data.copy()
-    expires_delta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    expire = datetime.now(timezone.utc) + expires_delta
+    expire = datetime.now(timezone.utc) + expires
     to_update.update({'exp': expire})
     encoded_jwt = jwt.encode(
         to_update, settings.SECRET_KEY, algorithm=ALGORITHM)
@@ -30,7 +30,8 @@ def create_access_token(data: dict) -> str:
 
 
 @router.post('/token')
-async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+async def login(response: Response,
+                form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
                 db: Annotated[Session, Depends(get_db)]) -> TokenSchema:
     """
     Login endpoint. Returns a JWT token.
@@ -44,6 +45,46 @@ async def login(form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
             detail='Incorrect email or password',
             headers={"WWW-Authenticate": "Bearer"},)
 
-    access_token = create_access_token(
-        {'sub': user.email, 'full_name': user.full_name})
+    access_token = create_jwt_token({'sub': user.email, 'full_name': user.full_name}, timedelta(
+        minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    refresh_token = create_jwt_token({'sub': user.email}, timedelta(
+        minutes=REFRESH_TOKEN_EXPIRE_MINUTES))
+
+    response.set_cookie(key='auth_token', value=refresh_token,
+                        httponly=True, max_age=REFRESH_TOKEN_EXPIRE_MINUTES * 60)
+
+    return TokenSchema(access_token=access_token, token_type='bearer')
+
+
+@router.post('/refresh')
+async def refresh_token(response: Response, auth_token: Annotated[str | None, Cookie()] = None):
+    """
+    Refresh token endpoint. Returns new access and refresh tokens.
+    """
+
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail='Invalid token',
+        headers={"WWW-Authenticate": "Bearer"},)
+
+    if not auth_token:
+        raise credentials_exception
+
+    try:
+        payload = jwt.decode(
+            auth_token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        email: str = payload.get('sub')
+        if email is None:
+            raise credentials_exception
+    except jwt.PyJWTError:
+        raise credentials_exception
+
+    access_token = create_jwt_token({'sub': email}, timedelta(
+        minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    refresh_token = create_jwt_token({'sub': email}, timedelta(
+        minutes=REFRESH_TOKEN_EXPIRE_MINUTES))
+    
+    response.set_cookie(key='auth_token', value=refresh_token,
+                        httponly=True, max_age=REFRESH_TOKEN_EXPIRE_MINUTES * 60)
+
     return TokenSchema(access_token=access_token, token_type='bearer')
