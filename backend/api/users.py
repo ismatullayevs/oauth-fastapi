@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from config.db import get_db
 from models.user import User
-from schemas.user import UserCreateSchema, UserSchema
+from schemas.user import UserCreateSchema, UserSchema, UserUpdateSchema
 from typing import Annotated
 from passlib.context import CryptContext
 from config.settings import get_settings
@@ -36,8 +36,7 @@ async def register_user(form_data: Annotated[UserCreateSchema, Form()],
     db.commit()
     db.refresh(db_user)
 
-    user = UserSchema.model_validate(db_user)
-    return user
+    return db_user
 
 
 async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)],
@@ -64,13 +63,30 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)],
     if user is None:
         raise credentials_exception
 
-    return UserSchema.model_validate(user)
+    return user
 
 
 @router.get('/me')
-async def get_me(db: Annotated[Session, Depends(get_db)],
-                 user: Annotated[UserSchema, Depends(get_current_user)]) -> UserSchema:
+async def get_user(db: Annotated[Session, Depends(get_db)],
+                   user: Annotated[UserSchema, Depends(get_current_user)]) -> UserSchema:
     """
     Returns the user's data.
     """
+    return user
+
+
+@router.put('/me')
+async def update_user(db: Annotated[Session, Depends(get_db)],
+                      user: Annotated[UserSchema, Depends(get_current_user)],
+                      form_data: UserUpdateSchema) -> UserSchema:
+    """
+    Updates the user's data.
+    """
+
+    for key, value in form_data.model_dump().items():
+        setattr(user, key, value)
+
+    db.commit()
+    db.refresh(user)
+
     return user

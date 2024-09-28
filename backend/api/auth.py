@@ -45,7 +45,7 @@ async def login(response: Response,
             detail='Incorrect email or password',
             headers={"WWW-Authenticate": "Bearer"},)
 
-    access_token = create_jwt_token({'sub': user.email, 'full_name': user.full_name}, timedelta(
+    access_token = create_jwt_token({'sub': user.email}, timedelta(
         minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
     refresh_token = create_jwt_token({'sub': user.email}, timedelta(
         minutes=REFRESH_TOKEN_EXPIRE_MINUTES))
