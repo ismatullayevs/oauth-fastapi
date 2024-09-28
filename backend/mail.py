@@ -3,12 +3,11 @@ from config.settings import get_settings
 
 
 settings = get_settings()
-EMAIL_API = "https://api.mailgun.net/v3/signup.javohir.me/messages"
 
 
 def send_email(sender: str, to: list[str], subject: str, text: str):
     return requests.post(
-        EMAIL_API,
+        settings.EMAIL_API,
         auth=("api", settings.MAILGUN_API_TOKEN),
         data={"from": sender, "to": to, "subject": subject, "text": text}
     )

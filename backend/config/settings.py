@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7
     MAILGUN_API_TOKEN: str = "<API-TOKEN>"
+    EMAIL_API: str = "<EMAIL-API>"
     
     APP_URL: str = "http://localhost:3000"
     API_URL: str = "http://localhost:8000"
