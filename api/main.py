@@ -5,8 +5,6 @@ from routes.users import router as user_router
 from routes.auth import router as auth_router
 
 
-user_model.Base.metadata.create_all(bind=engine)
-
 app = FastAPI()
 
 api_router = APIRouter(prefix='/api')
