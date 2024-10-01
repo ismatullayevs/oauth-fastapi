@@ -2,11 +2,11 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from typing import Annotated
 from schemas.user import UserSchema, UserUpdateSchema
-from core.dependencies import get_current_active_user
-from config.db import get_db
+from api.deps import get_current_active_user
+from core.db import get_db
 
 
-router = APIRouter(prefix='/users', tags=['users'])
+router = APIRouter()
 
 
 @router.get('/me')

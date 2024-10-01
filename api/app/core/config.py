@@ -1,10 +1,10 @@
-from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from functools import lru_cache
+from typing import Literal
 
 
 class Settings(BaseSettings):
     app_name: str = "Awesome API"
+    ENVIRONMENT: Literal["development", "production", "testing"] = "development"
     SECRET_KEY: str = "<SECRET-KEY>"
     ALGORITHM: str = 'HS256'
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
@@ -18,6 +18,4 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file="../.env")
 
 
-@lru_cache()
-def get_settings():
-    return Settings()
+settings = Settings()

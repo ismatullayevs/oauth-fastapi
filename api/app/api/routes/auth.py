@@ -2,12 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status, Response, Cookie,
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import Annotated
 from sqlalchemy.orm import Session
-from config.db import get_db
+from core.db import get_db
 from models.user import User
 from passlib.context import CryptContext
 from schemas.token import TokenSchema
 from datetime import timedelta
-from config.settings import get_settings
+from core.config import settings
 from utils import create_jwt_token
 from core.email import send_activation_email
 from schemas.user import UserCreateSchema, UserSchema
@@ -15,12 +15,11 @@ from schemas.token import ActivationToken
 import jwt
 
 
-router = APIRouter(prefix='/auth', tags=['auth'])
+router = APIRouter()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-settings = get_settings()
 
 
-@router.post('/register')
+@router.post('/register', status_code=status.HTTP_201_CREATED)
 async def register_user(form_data: Annotated[UserCreateSchema, Form()],
                         db: Annotated[Session, Depends(get_db)]) -> UserSchema:
     """

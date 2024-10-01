@@ -1,9 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import jwt
-from config.settings import get_settings
-
-
-settings = get_settings()
+from core.config import settings
 
 
 def create_jwt_token(data: dict, expires: timedelta) -> str:
