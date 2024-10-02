@@ -39,6 +39,7 @@ async def register_user(form_data: Annotated[UserCreateSchema, Form()],
     db.commit()
     db.refresh(db_user)
 
+    # TODO: add types to tokens
     activation_expires = timedelta(settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     activation_token = create_jwt_token(
         {'sub': db_user.email}, activation_expires)
@@ -47,7 +48,7 @@ async def register_user(form_data: Annotated[UserCreateSchema, Form()],
     return db_user
 
 
-@router.get('/verify-email')
+@router.post('/verify-email')
 async def activate_user(token: ActivationToken,
                         db: Annotated[Session, Depends(get_db)]) -> UserSchema:
     """
