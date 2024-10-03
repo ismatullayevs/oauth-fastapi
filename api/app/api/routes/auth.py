@@ -4,19 +4,17 @@ from typing import Annotated
 from sqlalchemy.orm import Session
 from core.db import get_db
 from models.user import User
-from passlib.context import CryptContext
 from schemas.token import TokenSchema
-from datetime import timedelta
 from core.config import settings
-from utils import create_jwt_token
 from core.email import send_activation_email
+from core.security import (hash_password, verify_password, create_access_token,
+                           create_refresh_token, create_activation_token)
 from schemas.user import UserCreateSchema, UserSchema
 from schemas.token import ActivationToken
 import jwt
 
 
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 @router.post('/register', status_code=status.HTTP_201_CREATED)
@@ -30,7 +28,7 @@ async def register_user(form_data: Annotated[UserCreateSchema, Form()],
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail='User already exists')
 
-    hashed_password = pwd_context.hash(form_data.password)
+    hashed_password = hash_password(form_data.password)
     db_user = User(**form_data.model_dump(exclude={'password'}),
                    hashed_password=hashed_password,
                    is_active=False)
@@ -39,10 +37,8 @@ async def register_user(form_data: Annotated[UserCreateSchema, Form()],
     db.commit()
     db.refresh(db_user)
 
-    # TODO: add types to tokens
-    activation_expires = timedelta(settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    activation_token = create_jwt_token(
-        {'sub': db_user.email}, activation_expires)
+    activation_token = create_activation_token(
+        {'sub': db_user.email})
     send_activation_email(str(db_user.email), activation_token)
 
     return db_user
@@ -65,7 +61,7 @@ async def activate_user(token: ActivationToken,
         payload = jwt.decode(token.token, settings.SECRET_KEY,
                              algorithms=[settings.ALGORITHM])
         email: str = payload.get('sub')
-        if email is None:
+        if email is None or payload.get('type') != 'activation':
             raise credentials_exception
     except jwt.PyJWTError:
         raise credentials_exception
@@ -101,9 +97,8 @@ async def resend_verification(email: Annotated[str, Form()],
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail='User is already active')
 
-    activation_expires = timedelta(settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    activation_token = create_jwt_token(
-        {'sub': user.email}, activation_expires)
+    activation_token = create_activation_token(
+        {'sub': user.email})
     send_activation_email(str(user.email), activation_token)
 
     return {'message': 'Activation email has been sent'}
@@ -119,7 +114,7 @@ async def login(response: Response,
 
     user = db.query(User).filter(User.email == form_data.username).first()
 
-    if not user or not pwd_context.verify(form_data.password, str(user.hashed_password)):
+    if not user or not verify_password(form_data.password, str(user.hashed_password)):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail='Incorrect email or password',
@@ -131,10 +126,8 @@ async def login(response: Response,
             detail='User is not activated',
             headers={"WWW-Authenticate": "Bearer"},)
 
-    access_token = create_jwt_token({'sub': user.email}, timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
-    refresh_token = create_jwt_token({'sub': user.email}, timedelta(
-        minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES))
+    access_token = create_access_token({'sub': user.email})
+    refresh_token = create_refresh_token({'sub': user.email})
 
     response.set_cookie(key='auth_token', value=refresh_token,
                         httponly=True, max_age=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60)
@@ -160,15 +153,13 @@ async def refresh_token(response: Response, auth_token: Annotated[str | None, Co
         payload = jwt.decode(
             auth_token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         email: str = payload.get('sub')
-        if email is None:
+        if email is None or payload.get('type') != 'refresh':
             raise credentials_exception
     except jwt.PyJWTError:
         raise credentials_exception
 
-    access_token = create_jwt_token({'sub': email}, timedelta(
-        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES))
-    refresh_token = create_jwt_token({'sub': email}, timedelta(
-        minutes=settings.REFRESH_TOKEN_EXPIRE_MINUTES))
+    access_token = create_access_token({'sub': email})
+    refresh_token = create_refresh_token({'sub': email})
 
     response.set_cookie(key='auth_token', value=refresh_token,
                         httponly=True, max_age=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60)

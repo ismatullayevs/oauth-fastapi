@@ -1,6 +1,5 @@
 from tests.conftests import client
-from utils import create_jwt_token
-from datetime import timedelta
+from core.security import create_activation_token
 
 
 test_user = {
@@ -25,9 +24,10 @@ def test_register():
 
 
 def test_activate_user():
-    activation_token = create_jwt_token(
-        {"sub": test_user["email"]}, timedelta(minutes=5))
-    response = client.post(f"/api/auth/verify-email/", json={"token": activation_token})
+    activation_token = create_activation_token(
+        {"sub": test_user["email"]})
+    response = client.post(f"/api/auth/verify-email/",
+                           json={"token": activation_token})
     data = response.json()
     assert response.status_code == 200
     assert data["email"] == test_user["email"]

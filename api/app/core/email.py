@@ -11,17 +11,17 @@ def send_email(sender: str, to: list[str], subject: str, text: str):
 
 
 def send_activation_email(to: str, activation_token: str):
+    if settings.ENVIRONMENT == "testing":
+        return
+
     text = f"""
 Welcome to our platform! Please activate your account by clicking the link below:
 {settings.APP_URL}/activate?token={activation_token}
 """
-    print('settings.ENVIRONMENT', settings.ENVIRONMENT)
-    if not settings.ENVIRONMENT == "testing":
-        return send_email(
-            "Registration <mailgun@signup.javohir.me>",
-            to=[to],
-            subject="Activate your account",
-            text=text,
-        )
-
-    print(text)
+    
+    return send_email(
+        "Registration <mailgun@signup.javohir.me>",
+        to=[to],
+        subject="Activate your account",
+        text=text,
+    )
