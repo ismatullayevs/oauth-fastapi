@@ -6,12 +6,13 @@ from core.db import get_db
 from models.user import User
 from schemas.token import TokenSchema
 from core.config import settings
-from core.email import send_activation_email
+from core.email_utils import send_activation_email
 from core.security import (hash_password, verify_password, create_access_token,
                            create_refresh_token, create_activation_token)
 from schemas.user import UserCreateSchema, UserSchema
 from schemas.token import ActivationToken
 import jwt
+import httpx
 
 
 router = APIRouter()
@@ -163,5 +164,65 @@ async def refresh_token(response: Response, auth_token: Annotated[str | None, Co
 
     response.set_cookie(key='auth_token', value=refresh_token,
                         httponly=True, max_age=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60)
+
+    return TokenSchema(access_token=access_token, token_type='bearer')
+
+
+@router.get('/google-login')
+async def google_login():
+    """
+    Redirects to Google OAuth2 login page.
+    """
+
+    return {'url': settings.get_google_auth_url()}
+
+
+@router.get('/google')
+async def google_auth(resp: Response, code: str, db: Annotated[Session, Depends(get_db)]):
+    """
+    Google OAuth2 callback endpoint.
+    """
+
+    token_url = "https://oauth2.googleapis.com/token"
+    data = {
+        "code": code,
+        "client_id": settings.GOOGLE_CLIENT_ID,
+        "client_secret": settings.GOOGLE_CLIENT_SECRET,
+        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+        "grant_type": "authorization_code"
+    }
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(token_url, data=data)
+        response_data = response.json()
+
+    if 'error' in response_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=response_data['error'])
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get('https://www.googleapis.com/oauth2/v2/userinfo',
+                                    headers={'Authorization': f"Bearer {response_data['access_token']}"})
+        user_data = response.json()
+
+    user = db.query(User).filter(User.email == user_data['email']).first()
+    if not user:
+        user = User(email=user_data['email'],
+                    full_name=user_data['name'],
+                    is_active=True)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    if not bool(user.is_active):
+        user.is_active = True  # type: ignore
+        db.commit()
+        db.refresh(user)
+
+    access_token = create_access_token({'sub': user.email})
+    refresh_token = create_refresh_token({'sub': user.email})
+
+    resp.set_cookie(key='auth_token', value=refresh_token,
+                    httponly=True, max_age=settings.REFRESH_TOKEN_EXPIRE_MINUTES * 60)
 
     return TokenSchema(access_token=access_token, token_type='bearer')
